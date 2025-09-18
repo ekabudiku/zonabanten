@@ -1,24 +1,98 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGIS Zonasi</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
-    
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <title>WebGIS Zona</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { margin:0; padding:0; }
+    #map { width: 100%; height: 100vh; }
+    #controls {
+      position: absolute;
+      top: 10px; left: 50px;
+      z-index: 1000;
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    }
+  </style>
 </head>
 <body>
 
-    <div id="map"></div>
+<div id="controls">
+  <label for="zonaSelect">Pilih Zona:</label>
+  <select id="zonaSelect">
+    <option value="">-- Pilih Zona --</option>
+    <option value="0001_1590408910690003.geojson">Zona 1</option>
+    <option value="0001_9101104121000002.geojson">Zona 2</option>
+    <option value="0001_3321606000020004.geojson">Zona 3</option>
+    <!-- Tambahkan sesuai daftar file -->
+  </select>
+</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-     crossorigin=""></script>
-    
-    <script src="script.js"></script>
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+  // Inisialisasi peta
+  var map = L.map('map').setView([-7.56, 110.82], 10); // sesuaikan dengan AOI
+
+  // Basemap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Layer aktif
+  var currentLayer = null;
+
+  // Fungsi getColor berdasarkan kode
+  function getColorByKode(kode) {
+    const colors = {
+      "A": "#1f77b4",
+      "B": "#ff7f0e",
+      "C": "#2ca02c",
+      "D": "#d62728"
+    };
+    return colors[kode] || "#999999";
+  }
+
+  // Style
+  function styleByKode(feature) {
+    return {
+      color: "#000",
+      weight: 1,
+      fillColor: getColorByKode(feature.properties.kode),
+      fillOpacity: 0.6
+    };
+  }
+
+  // Event saat pilih dropdown
+  document.getElementById('zonaSelect').addEventListener('change', function(e) {
+    var file = e.target.value;
+    if (!file) return;
+
+    // Hapus layer lama
+    if (currentLayer) {
+      map.removeLayer(currentLayer);
+    }
+
+    // Load GeoJSON baru
+    fetch("assets/data/" + file)
+      .then(res => res.json())
+      .then(data => {
+        currentLayer = L.geoJSON(data, {
+          style: styleByKode,
+          onEachFeature: function (feature, layer) {
+            layer.bindPopup("Kode: " + feature.properties.kode);
+          }
+        }).addTo(map);
+        map.fitBounds(currentLayer.getBounds());
+      });
+  });
+</script>
 </body>
 </html>
