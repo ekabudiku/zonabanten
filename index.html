@@ -6,8 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    body { margin:0; padding:0; }
+    body { margin:0; padding:0; font-family: Arial, sans-serif; }
     #map { width: 100%; height: 100vh; }
+
+    /* Panel kontrol */
     #controls {
       position: absolute;
       top: 10px; left: 10px;
@@ -19,26 +21,81 @@
       overflow-y: auto;
       box-shadow: 0 0 5px rgba(0,0,0,0.3);
       font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 280px;
     }
-    #controls h3 {
-      margin: 0 0 8px 0;
-      font-size: 15px;
-    }
+    #controls h3 { margin: 0; font-size: 15px; }
+
     label { display: block; margin-bottom: 4px; }
+
+    select, input[type=checkbox] {
+      transform: scale(1.1);
+      margin-right: 6px;
+    }
+
+    /* Legenda */
+    .legend {
+      position: absolute;
+      bottom: 20px; right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 18px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    }
+    .legend i {
+      width: 18px; height: 18px;
+      float: left;
+      margin-right: 8px;
+      opacity: 0.7;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      #controls {
+        max-width: 95%;
+        font-size: 12px;
+      }
+      .legend {
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
 <body>
 
 <div id="controls">
-  <h3>Pilih Zona:</h3>
-  <div id="zonaList"></div>
+  <div>
+    <h3>Dropdown Zona</h3>
+    <select id="zonaSelect">
+      <option value="">-- Pilih Zona --</option>
+    </select>
+  </div>
+
+  <div>
+    <h3>Checklist Zona</h3>
+    <div id="zonaList"></div>
+  </div>
 </div>
 
 <div id="map"></div>
 
+<!-- Legenda -->
+<div class="legend" id="legend">
+  <strong>Legenda</strong><br>
+  <i style="background:#1f77b4"></i> Kode A<br>
+  <i style="background:#ff7f0e"></i> Kode B<br>
+  <i style="background:#2ca02c"></i> Kode C<br>
+  <i style="background:#d62728"></i> Kode D<br>
+  <i style="background:#999999"></i> Lainnya
+</div>
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-  // Inisialisasi peta
   var map = L.map('map').setView([-7.56, 110.82], 10);
 
   // Basemap
@@ -46,10 +103,9 @@
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Objek penyimpanan layer per file
   var layers = {};
 
-  // Fungsi warna berdasarkan kode
+  // Warna berdasarkan kode
   function getColorByKode(kode) {
     const colors = {
       "A": "#1f77b4",
@@ -60,7 +116,6 @@
     return colors[kode] || "#999999";
   }
 
-  // Style berdasarkan atribut kode
   function styleByKode(feature) {
     return {
       color: "#000",
@@ -75,7 +130,16 @@
     .then(res => res.json())
     .then(files => {
       let zonaList = document.getElementById('zonaList');
+      let dropdown = document.getElementById('zonaSelect');
+
       files.forEach((file, idx) => {
+        // Tambah ke dropdown
+        let opt = document.createElement("option");
+        opt.value = file;
+        opt.textContent = "Zona " + (idx+1);
+        dropdown.appendChild(opt);
+
+        // Tambah ke checklist
         let id = "zona_" + idx;
         let label = document.createElement("label");
         let checkbox = document.createElement("input");
@@ -84,13 +148,12 @@
         checkbox.id = id;
 
         label.appendChild(checkbox);
-        label.appendChild(document.createTextNode(" Zona " + (idx+1) + " (" + file + ")"));
+        label.appendChild(document.createTextNode(" Zona " + (idx+1)));
         zonaList.appendChild(label);
 
-        // Event saat dicentang
-        checkbox.addEventListener("change", function(e) {
+        // Event checkbox
+        checkbox.addEventListener("change", function() {
           if (this.checked) {
-            // Load GeoJSON
             fetch("assets/data/" + file)
               .then(res => res.json())
               .then(data => {
@@ -103,13 +166,40 @@
                 map.fitBounds(layers[file].getBounds());
               });
           } else {
-            // Hapus layer dari map
             if (layers[file]) {
               map.removeLayer(layers[file]);
               delete layers[file];
             }
           }
         });
+      });
+
+      // Event dropdown
+      dropdown.addEventListener("change", function() {
+        let file = this.value;
+        if (!file) return;
+
+        // Hapus semua layer dulu
+        Object.keys(layers).forEach(f => {
+          map.removeLayer(layers[f]);
+          delete layers[f];
+        });
+
+        // Uncheck semua checkbox
+        document.querySelectorAll("#zonaList input[type=checkbox]").forEach(cb => cb.checked = false);
+
+        // Load file baru
+        fetch("assets/data/" + file)
+          .then(res => res.json())
+          .then(data => {
+            layers[file] = L.geoJSON(data, {
+              style: styleByKode,
+              onEachFeature: function (feature, layer) {
+                layer.bindPopup("Kode: " + feature.properties.kode);
+              }
+            }).addTo(map);
+            map.fitBounds(layers[file].getBounds());
+          });
       });
     });
 </script>
