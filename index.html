@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <title>WebGIS Zona</title>
+  <title>WebGIS Zona Multi</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
@@ -10,36 +10,46 @@
     #map { width: 100%; height: 100vh; }
     #controls {
       position: absolute;
-      top: 10px; left: 50px;
+      top: 10px; left: 10px;
       z-index: 1000;
       background: white;
-      padding: 8px;
+      padding: 10px;
       border-radius: 6px;
+      max-height: 90vh;
+      overflow-y: auto;
       box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      font-size: 14px;
     }
+    #controls h3 {
+      margin: 0 0 8px 0;
+      font-size: 15px;
+    }
+    label { display: block; margin-bottom: 4px; }
   </style>
 </head>
 <body>
 
 <div id="controls">
-  <label for="zonaSelect">Pilih Zona:</label>
-  <select id="zonaSelect">
-    <option value="">-- Pilih Zona --</option>
-  </select>
+  <h3>Pilih Zona:</h3>
+  <div id="zonaList"></div>
 </div>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
+  // Inisialisasi peta
   var map = L.map('map').setView([-7.56, 110.82], 10);
 
+  // Basemap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  var currentLayer = null;
+  // Objek penyimpanan layer per file
+  var layers = {};
 
+  // Fungsi warna berdasarkan kode
   function getColorByKode(kode) {
     const colors = {
       "A": "#1f77b4",
@@ -50,6 +60,7 @@
     return colors[kode] || "#999999";
   }
 
+  // Style berdasarkan atribut kode
   function styleByKode(feature) {
     return {
       color: "#000",
@@ -59,40 +70,48 @@
     };
   }
 
-  // Ambil daftar file dari files.json
+  // Load daftar file dari files.json
   fetch("assets/files.json")
     .then(res => res.json())
     .then(files => {
-      let select = document.getElementById('zonaSelect');
+      let zonaList = document.getElementById('zonaList');
       files.forEach((file, idx) => {
-        let opt = document.createElement("option");
-        opt.value = file;
-        opt.textContent = "Zona " + (idx+1) + " (" + file + ")";
-        select.appendChild(opt);
+        let id = "zona_" + idx;
+        let label = document.createElement("label");
+        let checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = file;
+        checkbox.id = id;
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(" Zona " + (idx+1) + " (" + file + ")"));
+        zonaList.appendChild(label);
+
+        // Event saat dicentang
+        checkbox.addEventListener("change", function(e) {
+          if (this.checked) {
+            // Load GeoJSON
+            fetch("assets/data/" + file)
+              .then(res => res.json())
+              .then(data => {
+                layers[file] = L.geoJSON(data, {
+                  style: styleByKode,
+                  onEachFeature: function (feature, layer) {
+                    layer.bindPopup("Kode: " + feature.properties.kode);
+                  }
+                }).addTo(map);
+                map.fitBounds(layers[file].getBounds());
+              });
+          } else {
+            // Hapus layer dari map
+            if (layers[file]) {
+              map.removeLayer(layers[file]);
+              delete layers[file];
+            }
+          }
+        });
       });
     });
-
-  // Event pilih zona
-  document.getElementById('zonaSelect').addEventListener('change', function(e) {
-    var file = e.target.value;
-    if (!file) return;
-
-    if (currentLayer) {
-      map.removeLayer(currentLayer);
-    }
-
-    fetch("assets/data/" + file)
-      .then(res => res.json())
-      .then(data => {
-        currentLayer = L.geoJSON(data, {
-          style: styleByKode,
-          onEachFeature: function (feature, layer) {
-            layer.bindPopup("Kode: " + feature.properties.kode);
-          }
-        }).addTo(map);
-        map.fitBounds(currentLayer.getBounds());
-      });
-  });
 </script>
 </body>
 </html>
