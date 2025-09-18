@@ -4,87 +4,133 @@
   <meta charset="utf-8">
   <title>WebGIS Zona Multi</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    body { margin:0; padding:0; font-family: Arial, sans-serif; }
-    #map { width: 100%; height: 100vh; }
+    /* Mengatur dasar halaman agar tidak ada scroll yang tidak perlu */
+    html, body { 
+      margin: 0; 
+      padding: 0; 
+      height: 100%;
+      font-family: Arial, sans-serif; 
+    }
 
-    /* Panel kontrol */
+    #map { 
+      width: 100%; 
+      height: 100%; 
+    }
+
+    /* --- Panel Kontrol Utama --- */
     #controls {
       position: absolute;
-      top: 10px; left: 10px;
-      z-index: 1000;
-      background: white;
+      top: 10px;
+      left: 10px;
+      z-index: 1000; /* Pastikan di atas peta */
+      background: rgba(255, 255, 255, 0.9); /* Sedikit transparan */
       padding: 10px;
-      border-radius: 6px;
-      max-height: 90vh;
+      border-radius: 8px;
+      max-height: calc(100vh - 40px); /* Batasi tinggi agar tidak mentok */
       overflow-y: auto;
-      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       font-size: 14px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 15px; /* Jarak antar elemen */
       max-width: 280px;
+      transition: all 0.3s ease; /* Animasi halus */
     }
-    #controls h3 { margin: 0; font-size: 15px; }
+    #controls h3 { margin: 0 0 5px 0; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 5px;}
 
-    label { display: block; margin-bottom: 4px; }
-
-    select, input[type=checkbox] {
-      transform: scale(1.1);
-      margin-right: 6px;
-    }
-
-    /* Legenda */
+    label { display: flex; align-items: center; margin-bottom: 5px; cursor: pointer; }
+    select { width: 100%; padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    #zonaList { max-height: 200px; overflow-y: auto; padding-right: 5px;}
+    
+    /* --- Legenda --- */
     .legend {
       position: absolute;
-      bottom: 20px; right: 10px;
+      bottom: 20px;
+      right: 10px;
       z-index: 1000;
-      background: white;
+      background: rgba(255, 255, 255, 0.9);
       padding: 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 13px;
-      line-height: 18px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      line-height: 1.5;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
     .legend i {
-      width: 18px; height: 18px;
+      width: 18px;
+      height: 18px;
       float: left;
       margin-right: 8px;
-      opacity: 0.7;
+      border: 1px solid rgba(0,0,0,0.2);
     }
 
-    /* Responsive */
-    @media (max-width: 600px) {
-      #controls {
-        max-width: 95%;
-        font-size: 12px;
+    /* --- Tombol Toggle untuk Mobile --- */
+    .toggle-button {
+        display: none; /* Sembunyikan di desktop */
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1001; /* Di atas panel kontrol */
+        background: white;
+        border: none;
+        padding: 8px 12px;
+        font-size: 20px;
+        cursor: pointer;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    /* --- Media Query untuk Layar Kecil (Mobile) --- */
+    @media (max-width: 768px) {
+      .toggle-button {
+        display: block; /* Tampilkan tombol di mobile */
       }
+      
+      #controls {
+        left: -350px; /* Sembunyikan panel ke kiri */
+        width: 280px;
+        height: calc(100vh - 20px);
+        max-height: none;
+        top: 10px;
+      }
+
+      /* Kelas 'active' untuk menampilkan panel */
+      #controls.active {
+        left: 10px; /* Munculkan panel */
+      }
+      
       .legend {
         font-size: 12px;
+        bottom: 10px;
+        right: 10px;
+        /* Pindahkan ke atas jika ada kontrol zoom Leaflet di bawah */
+        margin-bottom: 25px; 
       }
     }
   </style>
 </head>
 <body>
 
+<button class="toggle-button" id="toggleButton">☰</button>
+
 <div id="controls">
   <div>
-    <h3>Dropdown Zona</h3>
+    <h3>Pilih Zona Tunggal</h3>
     <select id="zonaSelect">
-      <option value="">-- Pilih Zona --</option>
+      <option value="">-- Tampilkan Satu Zona --</option>
     </select>
   </div>
 
   <div>
-    <h3>Checklist Zona</h3>
+    <h3>Pilih Multi Zona</h3>
     <div id="zonaList"></div>
   </div>
 </div>
 
 <div id="map"></div>
 
-<!-- Legenda -->
 <div class="legend" id="legend">
   <strong>Legenda</strong><br>
   <i style="background:#1f77b4"></i> Kode A<br>
@@ -98,34 +144,25 @@
 <script>
   var map = L.map('map').setView([-7.56, 110.82], 10);
 
-  // Basemap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
   var layers = {};
 
-  // Warna berdasarkan kode
   function getColorByKode(kode) {
     const colors = {
-      "A": "#1f77b4",
-      "B": "#ff7f0e",
-      "C": "#2ca02c",
-      "D": "#d62728"
+      "A": "#1f77b4", "B": "#ff7f0e", "C": "#2ca02c", "D": "#d62728"
     };
     return colors[kode] || "#999999";
   }
 
   function styleByKode(feature) {
     return {
-      color: "#000",
-      weight: 1,
-      fillColor: getColorByKode(feature.properties.kode),
-      fillOpacity: 0.6
+      color: "#000", weight: 1, fillColor: getColorByKode(feature.properties.kode), fillOpacity: 0.6
     };
   }
 
-  // Load daftar file dari files.json
   fetch("assets/files.json")
     .then(res => res.json())
     .then(files => {
@@ -133,13 +170,13 @@
       let dropdown = document.getElementById('zonaSelect');
 
       files.forEach((file, idx) => {
-        // Tambah ke dropdown
+        let zonaName = "Zona " + (idx + 1);
+        
         let opt = document.createElement("option");
         opt.value = file;
-        opt.textContent = "Zona " + (idx+1);
+        opt.textContent = zonaName;
         dropdown.appendChild(opt);
 
-        // Tambah ke checklist
         let id = "zona_" + idx;
         let label = document.createElement("label");
         let checkbox = document.createElement("input");
@@ -148,60 +185,66 @@
         checkbox.id = id;
 
         label.appendChild(checkbox);
-        label.appendChild(document.createTextNode(" Zona " + (idx+1)));
+        label.appendChild(document.createTextNode(" " + zonaName));
         zonaList.appendChild(label);
 
-        // Event checkbox
         checkbox.addEventListener("change", function() {
           if (this.checked) {
-            fetch("assets/data/" + file)
-              .then(res => res.json())
-              .then(data => {
-                layers[file] = L.geoJSON(data, {
-                  style: styleByKode,
-                  onEachFeature: function (feature, layer) {
-                    layer.bindPopup("Kode: " + feature.properties.kode);
-                  }
-                }).addTo(map);
-                map.fitBounds(layers[file].getBounds());
-              });
+            loadLayer(file);
           } else {
-            if (layers[file]) {
-              map.removeLayer(layers[file]);
-              delete layers[file];
-            }
+            removeLayer(file);
           }
         });
       });
-
-      // Event dropdown
+      
       dropdown.addEventListener("change", function() {
         let file = this.value;
-        if (!file) return;
-
-        // Hapus semua layer dulu
-        Object.keys(layers).forEach(f => {
-          map.removeLayer(layers[f]);
-          delete layers[f];
-        });
-
-        // Uncheck semua checkbox
-        document.querySelectorAll("#zonaList input[type=checkbox]").forEach(cb => cb.checked = false);
-
-        // Load file baru
-        fetch("assets/data/" + file)
-          .then(res => res.json())
-          .then(data => {
-            layers[file] = L.geoJSON(data, {
-              style: styleByKode,
-              onEachFeature: function (feature, layer) {
-                layer.bindPopup("Kode: " + feature.properties.kode);
-              }
-            }).addTo(map);
-            map.fitBounds(layers[file].getBounds());
+        Object.keys(layers).forEach(removeLayer);
+        document.querySelectorAll("#zonaList input:checked").forEach(cb => cb.checked = false);
+        
+        if (file) {
+          loadLayer(file).then(() => {
+            let cb = document.querySelector(`#zonaList input[value="${file}"]`);
+            if(cb) cb.checked = true;
           });
+        }
       });
     });
+
+  function loadLayer(file) {
+    if (layers[file]) return; // Hindari memuat ulang jika sudah ada
+    return fetch("assets/data/" + file)
+      .then(res => res.json())
+      .then(data => {
+        layers[file] = L.geoJSON(data, {
+          style: styleByKode,
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup("Kode: " + feature.properties.kode);
+          }
+        }).addTo(map);
+        map.fitBounds(layers[file].getBounds());
+      });
+  }
+
+  function removeLayer(file) {
+    if (layers[file]) {
+      map.removeLayer(layers[file]);
+      delete layers[file];
+    }
+  }
+
+  // --- Logika untuk Tombol Toggle di Mobile ---
+  const toggleButton = document.getElementById('toggleButton');
+  const controlsPanel = document.getElementById('controls');
+
+  toggleButton.addEventListener('click', () => {
+    controlsPanel.classList.toggle('active');
+  });
+
+  map.on('click', () => {
+    controlsPanel.classList.remove('active');
+  });
+
 </script>
 </body>
 </html>
