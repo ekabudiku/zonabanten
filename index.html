@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <title>WebGIS Zona</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     body { margin:0; padding:0; }
@@ -26,30 +25,21 @@
   <label for="zonaSelect">Pilih Zona:</label>
   <select id="zonaSelect">
     <option value="">-- Pilih Zona --</option>
-    <option value="0001_1590408910690003.geojson">Zona 1</option>
-    <option value="0001_9101104121000002.geojson">Zona 2</option>
-    <option value="0001_3321606000020004.geojson">Zona 3</option>
-    <!-- Tambahkan sesuai daftar file -->
   </select>
 </div>
 
 <div id="map"></div>
 
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-  // Inisialisasi peta
-  var map = L.map('map').setView([-7.56, 110.82], 10); // sesuaikan dengan AOI
+  var map = L.map('map').setView([-7.56, 110.82], 10);
 
-  // Basemap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Layer aktif
   var currentLayer = null;
 
-  // Fungsi getColor berdasarkan kode
   function getColorByKode(kode) {
     const colors = {
       "A": "#1f77b4",
@@ -60,7 +50,6 @@
     return colors[kode] || "#999999";
   }
 
-  // Style
   function styleByKode(feature) {
     return {
       color: "#000",
@@ -70,17 +59,28 @@
     };
   }
 
-  // Event saat pilih dropdown
+  // Ambil daftar file dari files.json
+  fetch("assets/files.json")
+    .then(res => res.json())
+    .then(files => {
+      let select = document.getElementById('zonaSelect');
+      files.forEach((file, idx) => {
+        let opt = document.createElement("option");
+        opt.value = file;
+        opt.textContent = "Zona " + (idx+1) + " (" + file + ")";
+        select.appendChild(opt);
+      });
+    });
+
+  // Event pilih zona
   document.getElementById('zonaSelect').addEventListener('change', function(e) {
     var file = e.target.value;
     if (!file) return;
 
-    // Hapus layer lama
     if (currentLayer) {
       map.removeLayer(currentLayer);
     }
 
-    // Load GeoJSON baru
     fetch("assets/data/" + file)
       .then(res => res.json())
       .then(data => {
